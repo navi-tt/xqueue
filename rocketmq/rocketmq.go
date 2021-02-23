@@ -11,7 +11,7 @@ import (
 	"github.com/apache/rocketmq-client-go/v2/consumer"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/apache/rocketmq-client-go/v2/producer"
-	"github.com/liuxp0827/xqueue"
+	"github.com/navi-tt/xqueue"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -68,6 +68,7 @@ func (q *Queue) topic() string {
 func (q *Queue) groupId() string {
 	return q.config.GroupId
 }
+
 func (q *Queue) tags() []string {
 	return q.config.Tags
 }

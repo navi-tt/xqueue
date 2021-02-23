@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/go-redis/redis"
-	"github.com/liuxp0827/xqueue"
+	"github.com/navi-tt/xqueue"
 )
 
 type Queue struct {
