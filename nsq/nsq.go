@@ -10,11 +10,16 @@ import (
 )
 
 type Queue struct {
-	ctx      context.Context
-	config   xqueue.QueueConfig
-	producer *nsq.Producer
-	consumer *nsq.Consumer
-	message  *nsq.Message
+	ctx                 context.Context
+	config              xqueue.QueueConfig
+	producer            *nsq.Producer
+	consumer            *nsq.Consumer
+	consumerMessageChan chan *nsq.Message
+}
+
+func HandleMessage(msg *nsq.Message) error {
+	nsqmqpder.queue.consumerMessageChan <- msg
+	return nil
 }
 
 func (q *Queue) init(addr string) error {
@@ -22,7 +27,9 @@ func (q *Queue) init(addr string) error {
 		eg, _ = errgroup.WithContext(q.ctx)
 	)
 	if q.consumer != nil {
+		q.consumerMessageChan = make(chan *nsq.Message, 5)
 		eg.Go(func() error {
+
 			return q.consumer.ConnectToNSQD(addr)
 		})
 	}
@@ -45,11 +52,6 @@ func (q *Queue) tags() []string {
 	return q.config.Tags
 }
 
-func HandleMessage(msg *nsq.Message) error {
-	fmt.Println(string(msg.Body))
-	return nil
-}
-
 func (q *Queue) Enqueue(ctx context.Context, msg xqueue.Message) error {
 	if q.producer == nil {
 		return fmt.Errorf("producer no init")
@@ -59,8 +61,25 @@ func (q *Queue) Enqueue(ctx context.Context, msg xqueue.Message) error {
 }
 
 func (q *Queue) Dequeue(ctx context.Context) (xqueue.Message, error) {
-	//还不太懂nsq的dequeue，看范例是直接有一个handle func
-	return nil, nil
+	if q.consumer == nil || q.consumerMessageChan == nil {
+		return nil, fmt.Errorf("consumer no init")
+	}
+	select {
+	case msg, ok := <-q.consumerMessageChan:
+		if !ok {
+			return nil, fmt.Errorf("closed chan")
+		}
+
+		return &Message{
+			topic:     q.topic(),
+			groupId:   q.groupId(),
+			tags:      []string{},
+			data:      msg.Body,
+			messageId: fmt.Sprintf("%s", msg.ID),
+		}, nil
+	case <-ctx.Done():
+		return nil, nil
+	}
 }
 
 type Message struct {
@@ -120,11 +139,10 @@ type Provider struct {
 var nsqmqpder = &Provider{}
 
 type Config struct {
-	Addr           string          `json:"addr"`
-	Channel        string          `json:"channel"`
-	EnableConsumer bool            `json:"enable_consumer"`
-	EnableProducer bool            `json:"enable_producer"`
-	HandlerFunc    nsq.HandlerFunc `json:"handler_func"`
+	Addr           string `json:"addr"`
+	Channel        string `json:"channel"`
+	EnableConsumer bool   `json:"enable_consumer"`
+	EnableProducer bool   `json:"enable_producer"`
 }
 
 func (p *Provider) QueueInit(ctx context.Context, config xqueue.QueueConfig) error {
@@ -145,7 +163,7 @@ func (p *Provider) QueueInit(ctx context.Context, config xqueue.QueueConfig) err
 				return err
 			}
 
-			cs.AddHandler(p.config.HandlerFunc)
+			cs.AddHandler(nsq.HandlerFunc(HandleMessage))
 		}
 
 		if p.config.EnableProducer {

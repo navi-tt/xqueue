@@ -1,4 +1,4 @@
-package rocketmq
+package nsq
 
 import (
 	"context"
@@ -9,29 +9,20 @@ import (
 )
 
 var config = xqueue.QueueConfig{
-	Topic:      "TOPIC_TEST",
+	Topic:      "NSQ_TOPIC",
 	Tags:       []string{},
 	InstanceId: "",
 	GroupId:    "",
 	ProviderJsonConfig: `{
     "enable_consumer": true,
     "enable_producer": true,
-    "tags": [
-    ],
-    "end_point": "127.0.0.1:39876",
-    "access_key": "",
-    "secret_key": "",
-    "group_id": "GID_TEST",
-    "instance_id": "",
-    "message_model": 0,
-    "consume_from_where": 1,
-    "with_auto_commit": true,
-    "with_order": false
+    "addr": "172.24.145.37:4150",
+    "channel": "NSQ_CHANNEL"
 }`,
 }
 
-func initRocketmq() (*Provider, error) {
-	p, err := xqueue.GetProvider("rocketmq")
+func initNsqmq() (*Provider, error) {
+	p, err := xqueue.GetProvider("nsq")
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +34,7 @@ func TestQueue_Enqueue(t *testing.T) {
 	var (
 		eg, ctx = errgroup.WithContext(context.Background())
 	)
-	p, err := initRocketmq()
+	p, err := initNsqmq()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +52,8 @@ func TestQueue_Enqueue(t *testing.T) {
 		return q.Enqueue(ctx, &Message{
 			topic:     config.Topic,
 			groupId:   "",
-			tags:      config.Tags,
-			data:      []byte("hello world!~~"),
+			tags:      []string{},
+			data:      []byte("nice!~~"),
 			messageId: "",
 		})
 	})
@@ -73,7 +64,7 @@ func TestQueue_Enqueue(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		t.Logf("data: %+v", string(msg.GetData()))
+		t.Logf("data: %+v | id : %v", string(msg.GetData()),msg.MessageId())
 		return nil
 	})
 	err = eg.Wait()
